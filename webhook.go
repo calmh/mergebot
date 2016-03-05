@@ -16,16 +16,18 @@ type webhook struct {
 	addr     string
 	secret   string
 	username string
-	outbox   chan<- comment
+	comments chan<- comment
+	pullReqs chan<- pr
 	listener net.Listener
 }
 
-func newWebhook(outbox chan<- comment, addr, secret, username string) *webhook {
+func newWebhook(comments chan<- comment, pullReqs chan<- pr, addr, secret, username string) *webhook {
 	return &webhook{
 		addr:     addr,
 		secret:   secret,
 		username: username,
-		outbox:   outbox,
+		comments: comments,
+		pullReqs: pullReqs,
 	}
 }
 
@@ -84,10 +86,20 @@ func (h *webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if c.parseBody().recipient == h.username {
 			log.Printf("Handling comment by %s on %s", c.Sender.Login, c.Repository.FullName)
-			h.outbox <- c
+			h.comments <- c
 		} else {
 			log.Printf("Ignoring comment by %s on %s that does not look like it's for us", c.Sender.Login, c.Repository.FullName)
 		}
+
+	case "pull_request":
+		var p pr
+		if err := json.Unmarshal(body, &p); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		log.Printf("Handling pull request %d", p.Number)
+		h.pullReqs <- p
 
 	default:
 		log.Printf("Unknown event type %q, ignored", eventType)

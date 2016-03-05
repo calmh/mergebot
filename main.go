@@ -26,11 +26,12 @@ func main() {
 
 	main := suture.NewSimple("main")
 	comments := make(chan comment)
+	pullReqs := make(chan pr)
 
-	h := newWebhook(comments, *listenAddr, *secret, *username)
+	h := newWebhook(comments, pullReqs, *listenAddr, *secret, *username)
 	main.Add(h)
 
-	s := newSquasher(comments, allowedUsers, *username, *token)
+	s := newSquasher(comments, pullReqs, allowedUsers, *username, *token)
 	main.Add(s)
 
 	main.Serve()
