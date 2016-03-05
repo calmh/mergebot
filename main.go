@@ -1,71 +1,37 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
-	"log"
-	"net/http"
 	"os"
 	"strings"
 
 	"github.com/thejerf/suture"
 )
 
-var (
-	listenAddr   = ":8080"
-	githubSecret = ""
-)
-
 func main() {
-	flag.StringVar(&listenAddr, "listen", listenAddr, "Listen address")
-	flag.StringVar(&githubSecret, "secret", githubSecret, "Github secret token")
+	listenAddr := flag.String("listen", ":8080", "Listen address")
+	secret := flag.String("secret", "", "Github webhook secret")
+	token := flag.String("token", "", "Github access token")
+	username := flag.String("username", "", "Github user name")
+	allow := flag.String("allow", "", "Comma separeted list of allowed maintainers")
 	flag.Parse()
 
-	h := newWebhook("st-review")
-	http.Handle("/", h)
-
-	main := suture.NewSimple("main")
-	main.Add(h)
-	main.ServeBackground()
-
-	log.Fatal(http.ListenAndServe(listenAddr, nil))
-}
-
-func squash(pr int, user, msg string) (string, error) {
-
-	sourceBranch := fmt.Sprintf("pr/%d", pr)
-	s := newScript()
-	s.run("git", "fetch", "-f", "origin", fmt.Sprintf("refs/pull/%d/head:pr/%d", pr, pr))
-	s.run("git", "fetch", "-f", "origin", "master:orig/master")
-
-	s.run("git", "reset", "--hard")
-	s.run("git", "checkout", "master")
-	s.run("git", "reset", "--hard", "orig/master")
-	s.run("git", "clean", "-fxd")
-
-	t := newScript()
-	authorName := t.run("git", "log", "-n1", "--pretty=format:%an", sourceBranch)
-	authorEmail := t.run("git", "log", "-n1", "--pretty=format:%ae", sourceBranch)
-	os.Setenv("GIT_COMMITTER_NAME", authorName)
-	os.Setenv("GIT_COMMITTER_EMAIL", authorEmail)
-	os.Setenv("GIT_AUTHOR_NAME", authorName)
-	os.Setenv("GIT_AUTHOR_EMAIL", authorEmail)
-
-	var body string
-	if msg == "" {
-		// Overridden commit message from parameters
-		body = msg
-	} else {
-		// Commit message from first commit
-		body = t.run("git", "log", "-n1", "--pretty=format:%B", sourceBranch)
+	if *secret == "" || *token == "" || *username == "" || *allow == "" {
+		fmt.Println("Must set Github webhook secret, Github access token, and Github user name")
+		os.Exit(1)
 	}
 
-	body = fmt.Sprintf("%s\n\nMerged by: %s\n", strings.TrimSpace(body), user)
+	allowedUsers := strings.Split(*allow, ",")
 
-	s.run("git", "merge", "--squash", "--no-commit", sourceBranch)
-	s.runPipe(bytes.NewBufferString(msg), "git", "commit", "-F", "-")
-	s.run("git", "push", "origin", "master")
+	main := suture.NewSimple("main")
+	comments := make(chan comment)
 
-	return s.output.String(), s.Error()
+	h := newWebhook(comments, *listenAddr, *secret, *username)
+	main.Add(h)
+
+	s := newSquasher(comments, allowedUsers, *username, *token)
+	main.Add(s)
+
+	main.Serve()
 }

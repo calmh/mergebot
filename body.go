@@ -12,7 +12,7 @@ type body struct {
 	description string
 }
 
-var rcptExp = regexp.MustCompile(`@([^\s:]+):`)
+var rcptExp = regexp.MustCompile(`@([^\s:]+):?`)
 
 func parseBody(s string) body {
 	var res body

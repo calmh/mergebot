@@ -10,6 +10,7 @@ func TestParseBody(t *testing.T) {
 		{"", body{}},
 		{"foo bar", body{command: "foo bar"}},
 		{"@st-review: foo bar", body{recipient: "st-review", command: "foo bar"}},
+		{"@st-review foo bar", body{recipient: "st-review", command: "foo bar"}},
 		{" @st-review:  foo  bar ", body{recipient: "st-review", command: "foo bar"}},
 		{" @st-review:  foo  bar \nSubject here\nBody here\nMore body", body{recipient: "st-review", command: "foo bar", subject: "Subject here", description: "Body here\nMore body"}},
 		{" @st-review:  foo  bar \n\nSubject here\n\nBody here\nMore body\n\nMore", body{recipient: "st-review", command: "foo bar", subject: "Subject here", description: "Body here\nMore body\n\nMore"}},
