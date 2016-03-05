@@ -63,7 +63,7 @@ func (h *squasher) Serve() {
 
 				overrideDescr := ""
 				if body.subject != "" {
-					overrideDescr = strings.TrimSpace(body.subject + "\n\n" + body.description)
+					overrideDescr = strings.TrimSpace(body.subject + "\n\n" + reflow(body.description, 76))
 				}
 
 				os.Chdir(c.Repository.FullName)
