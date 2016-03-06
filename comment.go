@@ -29,7 +29,13 @@ type comment struct {
 
 	Sender struct {
 		Login string
+		URL   string
 	}
+}
+
+type user struct {
+	Name  string
+	Email string
 }
 
 func (c *comment) parseBody() body {
@@ -80,4 +86,33 @@ func (c *comment) close(username, token string) {
 		log.Println("Post:", resp.Status)
 		return
 	}
+}
+
+func (c *comment) user(username, token string) (user, error) {
+	req, err := http.NewRequest("GET", c.Sender.URL, nil)
+	if err != nil {
+		log.Println("Request:", err)
+		return user{}, err
+	}
+	req.SetBasicAuth(username, token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Println("Get:", err)
+		return user{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode > 299 {
+		log.Println("Post:", resp.Status)
+		return user{}, err
+	}
+
+	var u user
+	err = json.NewDecoder(resp.Body).Decode(&u)
+	if err != nil {
+		return user{}, err
+	}
+
+	return u, nil
 }

@@ -68,8 +68,15 @@ func (h *squasher) Serve() {
 					overrideDescr = strings.TrimSpace(body.subject + "\n\n" + reflow(body.description, 76))
 				}
 
+				user, err := c.user(h.username, h.token)
+				if err != nil || user.Email == "" {
+					c.post("Merge failed; could net retrieve user information for @"+c.Sender.Login, h.username, h.token)
+					log.Printf("Failed merge of PR %d on %s for %s: no user info (%v)", c.Issue.Number, c.Repository.FullName, c.Sender.Login, err)
+					continue
+				}
+
 				os.Chdir(c.Repository.FullName)
-				res, sha1, err := squash(c.Issue.Number, c.Sender.Login, overrideDescr)
+				res, sha1, err := squash(c.Issue.Number, user, overrideDescr)
 				os.Chdir(cur)
 
 				if err != nil {
@@ -120,7 +127,7 @@ func (h *squasher) Stop() {
 	close(h.stop)
 }
 
-func squash(pr int, user, msg string) (string, string, error) {
+func squash(pr int, user user, msg string) (string, string, error) {
 	sourceBranch := fmt.Sprintf("pr-%d", pr)
 	s := newScript()
 	s.run("git", "fetch", "-f", "origin", fmt.Sprintf("refs/pull/%d/head:pr-%d", pr, pr))
@@ -131,11 +138,15 @@ func squash(pr int, user, msg string) (string, string, error) {
 	s.run("git", "reset", "--hard", "orig/master")
 	s.run("git", "clean", "-fxd")
 
+	// Find first commit and extract info from it
 	t := newScript()
-	authorName := t.run("git", "log", "-n1", "--pretty=format:%an", sourceBranch)
-	authorEmail := t.run("git", "log", "-n1", "--pretty=format:%ae", sourceBranch)
-	os.Setenv("GIT_COMMITTER_NAME", authorName)
-	os.Setenv("GIT_COMMITTER_EMAIL", authorEmail)
+	mergeBase := t.run("git", "merge-base", sourceBranch, "master")
+	revs := strings.Fields(t.run("git", "rev-list", mergeBase+".."+sourceBranch))
+	firstCommit := revs[len(revs)-1]
+	authorName := t.run("git", "log", "-n1", "--pretty=format:%an", firstCommit)
+	authorEmail := t.run("git", "log", "-n1", "--pretty=format:%ae", firstCommit)
+	os.Setenv("GIT_COMMITTER_NAME", user.Name)
+	os.Setenv("GIT_COMMITTER_EMAIL", user.Email)
 	os.Setenv("GIT_AUTHOR_NAME", authorName)
 	os.Setenv("GIT_AUTHOR_EMAIL", authorEmail)
 
@@ -145,10 +156,8 @@ func squash(pr int, user, msg string) (string, string, error) {
 		body = msg
 	} else {
 		// Commit message from first commit
-		body = t.run("git", "log", "-n1", "--pretty=format:%B", sourceBranch)
+		body = t.run("git", "log", "-n1", "--pretty=format:%B", firstCommit)
 	}
-
-	body = fmt.Sprintf("%s\n\nMerged-by: %s (for PR #%d)\n", strings.TrimSpace(body), user, pr)
 
 	s.run("git", "merge", "--squash", "--no-commit", sourceBranch)
 	s.runPipe(bytes.NewBufferString(body), "git", "commit", "-F", "-")
