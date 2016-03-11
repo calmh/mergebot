@@ -21,6 +21,9 @@ type comment struct {
 		Number      int
 		URL         string
 		CommentsURL string `json:"comments_url"`
+		User        struct {
+			Login string
+		}
 	}
 
 	Repository struct {

@@ -9,26 +9,40 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sort"
+	"strings"
 )
+
+type prHandler func(p pr)
+type commentHandler func(c comment)
 
 // The webhook listens on addr for commands to username and send them to the outbox.
 type webhook struct {
-	addr     string
-	secret   string
-	username string
-	comments chan<- comment
-	pullReqs chan<- pr
-	listener net.Listener
+	addr            string
+	secret          string
+	username        string
+	token           string
+	commentHandlers map[string]commentHandler
+	prHandlers      []prHandler
+	listener        net.Listener
 }
 
-func newWebhook(comments chan<- comment, pullReqs chan<- pr, addr, secret, username string) *webhook {
+func newWebhook(addr, secret, username, token string) *webhook {
 	return &webhook{
-		addr:     addr,
-		secret:   secret,
-		username: username,
-		comments: comments,
-		pullReqs: pullReqs,
+		addr:            addr,
+		secret:          secret,
+		username:        username,
+		token:           token,
+		commentHandlers: make(map[string]commentHandler),
 	}
+}
+
+func (h *webhook) handlePR(fn prHandler) {
+	h.prHandlers = append(h.prHandlers, fn)
+}
+
+func (h *webhook) handleComment(prefix string, fn commentHandler) {
+	h.commentHandlers[prefix] = fn
 }
 
 func (h *webhook) Serve() {
@@ -84,9 +98,27 @@ func (h *webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if c.parseBody().recipient == h.username {
+		body := c.parseBody()
+		if body.recipient == h.username {
 			log.Printf("Handling comment by %s on %s", c.Sender.Login, c.Repository.FullName)
-			h.comments <- c
+			body.command = strings.ToLower(body.command)
+			handled := false
+			for prefix, fn := range h.commentHandlers {
+				if strings.HasPrefix(body.command, prefix) {
+					fn(c)
+					handled = true
+				}
+			}
+			if !handled {
+				var prefixes []string
+				for prefix := range h.commentHandlers {
+					prefixes = append(prefixes, prefix)
+				}
+				sort.Strings(prefixes)
+
+				msg := fmt.Sprintf("I'm sorry, @%s. I'm afraid I don't know what you mean. I know how to `merge` things!", c.Sender.Login)
+				c.post(msg, h.username, h.token)
+			}
 		} else {
 			log.Printf("Ignoring comment by %s on %s that does not look like it's for us", c.Sender.Login, c.Repository.FullName)
 		}
@@ -99,7 +131,9 @@ func (h *webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		log.Printf("Handling pull request %d", p.Number)
-		h.pullReqs <- p
+		for _, fn := range h.prHandlers {
+			fn(p)
+		}
 
 	default:
 		log.Printf("Unknown event type %q, ignored", eventType)

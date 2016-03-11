@@ -18,21 +18,19 @@ func main() {
 	flag.Parse()
 
 	if *secret == "" || *token == "" || *username == "" || *allow == "" {
-		fmt.Println("Must set Github webhook secret, Github access token, and Github user name")
+		fmt.Println("Must set Github webhook secret, Github access token, Github user name, and allowed users")
 		os.Exit(1)
 	}
 
 	allowedUsers := strings.Split(*allow, ",")
 
+	s := newHandler(allowedUsers, *username, *token)
+	h := newWebhook(*listenAddr, *secret, *username, *token)
+	h.handleComment("merge", s.handleMerge)
+	h.handleComment("squash", s.handleMerge)
+	h.handlePR(s.handlePullReq)
+
 	main := suture.NewSimple("main")
-	comments := make(chan comment)
-	pullReqs := make(chan pr)
-
-	h := newWebhook(comments, pullReqs, *listenAddr, *secret, *username)
 	main.Add(h)
-
-	s := newSquasher(comments, pullReqs, allowedUsers, *username, *token)
-	main.Add(s)
-
 	main.Serve()
 }
