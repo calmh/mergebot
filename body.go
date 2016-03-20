@@ -19,29 +19,28 @@ func parseBody(s string) body {
 
 	lines := strings.Split(s, "\n")
 	res.command = lines[0]
+	lines = lines[1:] // Skip command
 
-	if m := rcptExp.FindStringSubmatch(lines[0]); len(m) > 0 {
+	if m := rcptExp.FindStringSubmatch(res.command); len(m) > 0 {
 		res.recipient = m[1]
-		res.command = strings.Join(strings.Fields(lines[0])[1:], " ")
+		res.command = strings.Join(strings.Fields(res.command)[1:], " ")
 	}
 
-	if len(lines) > 1 {
-		lines = lines[1:] // Skip command
-		for strings.TrimSpace(lines[0]) == "" {
-			// Skip blank lines after command
-			lines = lines[1:]
-		}
+	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+		// Skip blank lines after command
+		lines = lines[1:]
+	}
+
+	if len(lines) > 0 {
 		res.subject = lines[0]
+		lines = lines[1:] // Skip subject
 	}
 
-	if len(lines) > 1 {
-		lines = lines[1:] // Skip subject
-		for strings.TrimSpace(lines[0]) == "" {
-			// Skip blank lines after subject
-			lines = lines[1:]
-		}
-		res.description = strings.Join(lines, "\n")
+	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+		// Skip blank lines after subject
+		lines = lines[1:]
 	}
+	res.description = strings.Join(lines, "\n")
 
 	return res
 }

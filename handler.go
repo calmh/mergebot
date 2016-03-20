@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -53,8 +54,10 @@ func (h *handler) handlePullReq(p pr) {
 	switch p.Action {
 	case "synchronize", "opened", "reopened":
 		updatePR(p.Number)
+		p.setStatus(statePending, "st-review", "Merge using st-review only, please.", h.username, h.token)
 	case "closed":
 		closePR(p.Number)
+		p.setStatus(stateSuccess, "st-review", "Closed.", h.username, h.token)
 	}
 
 	os.Chdir(cur)
@@ -96,25 +99,36 @@ func (h *handler) handleMerge(c comment) {
 		return
 	}
 
+	pr, err := c.getPR()
+	if err != nil {
+		log.Println("No pull request:", err)
+		return
+	}
+
+	pr.setStatus(stateSuccess, "st-review", "Merging...", h.username, h.token)
+
 	os.Chdir(c.Repository.FullName)
-	res, sha1, err := squash(c.Issue.Number, user, overrideDescr)
+	sha1, err := squash(c.Issue.Number, user, overrideDescr)
 	os.Chdir(cur)
 
 	if err != nil {
-		resMd := fmt.Sprintf("Merge failed:\n\n```\n%s\n```", res)
-		c.post(resMd, h.username, h.token)
-		log.Printf("Failed merge of PR %d on %s for %s:\n%s", c.Issue.Number, c.Repository.FullName, c.Sender.Login, res)
+		c.post(err.Error(), h.username, h.token)
+		log.Printf("Failed merge of PR %d on %s for %s:\n%s", c.Issue.Number, c.Repository.FullName, c.Sender.Login, err.Error())
+		pr.setStatus(stateFailure, "st-review", "Merge failed.", h.username, h.token)
 
 		return
 	}
 
 	resMd := fmt.Sprintf("OK, merged as %s. Thanks, @%s!", sha1, c.Issue.User.Login)
 	c.post(resMd, h.username, h.token)
+	pr.setStatus(stateSuccess, "st-review", "Merged.", h.username, h.token)
 	c.close(h.username, h.token)
 	log.Printf("Completed merge of PR %d on %s for %s", c.Issue.Number, c.Repository.FullName, c.Sender.Login)
 }
 
-func squash(pr int, user user, msg string) (string, string, error) {
+var allowedCommitSubjectRe = regexp.MustCompile(`^[a-zA-Z0-9_./-]+:\s`)
+
+func squash(pr int, user user, msg string) (string, error) {
 	sourceBranch := fmt.Sprintf("pr-%d", pr)
 	s := newScript()
 	s.run("git", "fetch", "-f", "origin", fmt.Sprintf("refs/pull/%d/head:pr-%d", pr, pr))
@@ -129,6 +143,9 @@ func squash(pr int, user user, msg string) (string, string, error) {
 	t := newScript()
 	mergeBase := t.run("git", "merge-base", sourceBranch, "master")
 	revs := strings.Fields(t.run("git", "rev-list", mergeBase+".."+sourceBranch))
+	if len(revs) == 0 {
+		return "", fmt.Errorf("Nothing to merge, as far as I can tell.")
+	}
 	firstCommit := revs[len(revs)-1]
 	authorName := t.run("git", "log", "-n1", "--pretty=format:%an", firstCommit)
 	authorEmail := t.run("git", "log", "-n1", "--pretty=format:%ae", firstCommit)
@@ -146,12 +163,20 @@ func squash(pr int, user user, msg string) (string, string, error) {
 		body = t.run("git", "log", "-n1", "--pretty=format:%B", firstCommit)
 	}
 
+	if !allowedCommitSubjectRe.MatchString(body) {
+		return "", fmt.Errorf("Commit subject does not match regexp `%s` - does it begin with a tag?", allowedCommitSubjectRe.String())
+	}
+
 	s.run("git", "merge", "--squash", "--no-commit", sourceBranch)
 	s.runPipe(bytes.NewBufferString(body), "git", "commit", "-F", "-")
 	sha1 := s.run("git", "rev-parse", "HEAD")
 	s.run("git", "push", "origin", "master")
 
-	return s.output.String(), sha1, s.Error()
+	if s.Error() != nil {
+		// Overwrite the error with whatever actual output we had, as a markdown verbatim.
+		return "", fmt.Errorf("Merge failed:\n\n```\n%s\n```\n", s.output.String())
+	}
+	return sha1, nil
 }
 
 func updatePR(pr int) {

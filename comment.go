@@ -24,6 +24,9 @@ type comment struct {
 		User        struct {
 			Login string
 		}
+		PullRequest struct {
+			URL string
+		} `json:"pull_request"`
 	}
 
 	Repository struct {
@@ -118,4 +121,18 @@ func (c *comment) user(username, token string) (user, error) {
 	}
 
 	return u, nil
+}
+
+func (c *comment) getPR() (pr, error) {
+	resp, err := http.Get(c.Issue.PullRequest.URL)
+	if err != nil {
+		return pr{}, err
+	}
+	defer resp.Body.Close()
+
+	var p pr
+	if err = json.NewDecoder(resp.Body).Decode(&p); err != nil {
+		return pr{}, err
+	}
+	return p, nil
 }

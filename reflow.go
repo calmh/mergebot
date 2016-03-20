@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"io"
 	"strings"
 )
@@ -17,7 +16,6 @@ func reflow(in string, width int) string {
 		if len(line) == 0 || strings.IndexAny(line, " \t") == 0 {
 			// Line is empty or starts with space. The previous paragraph has thus ended.
 			if para.Len() > 0 {
-				fmt.Println("* Flush")
 				reflowParagraph(out, para, width)
 				para.Reset()
 			}

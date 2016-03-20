@@ -112,11 +112,12 @@ func (h *webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if !handled {
 				var prefixes []string
 				for prefix := range h.commentHandlers {
-					prefixes = append(prefixes, prefix)
+					prefixes = append(prefixes, "`"+prefix+"`")
 				}
 				sort.Strings(prefixes)
+				knownCommands := strings.Join(prefixes, ", ")
 
-				msg := fmt.Sprintf("I'm sorry, @%s. I'm afraid I don't know what you mean. I know how to `merge` things!", c.Sender.Login)
+				msg := fmt.Sprintf("I'm sorry, @%s. I'm afraid I don't know what you mean. I know how to %s.", c.Sender.Login, knownCommands)
 				c.post(msg, h.username, h.token)
 			}
 		} else {
