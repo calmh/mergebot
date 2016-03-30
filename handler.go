@@ -162,10 +162,6 @@ func squash(pr int, user user, msg string) (string, error) {
 		body = t.run("git", "log", "-n1", "--pretty=format:%B", firstCommit)
 	}
 
-	if !allowedCommitSubjectRe.MatchString(body) {
-		return "", fmt.Errorf("Commit subject does not match regexp `%s` - does it begin with a tag?", allowedCommitSubjectRe.String())
-	}
-
 	s.run("git", "merge", "--squash", "--no-commit", sourceBranch)
 	s.runPipe(bytes.NewBufferString(body), "git", "commit", "-F", "-")
 	sha1 := s.run("git", "rev-parse", "HEAD")
