@@ -40,6 +40,7 @@ type comment struct {
 }
 
 type user struct {
+	Login string
 	Name  string
 	Email string
 }

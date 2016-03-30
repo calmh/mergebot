@@ -17,8 +17,8 @@ func main() {
 	allow := flag.String("allow", "", "Comma separeted list of allowed maintainers")
 	flag.Parse()
 
-	if *secret == "" || *token == "" || *username == "" || *allow == "" {
-		fmt.Println("Must set Github webhook secret, Github access token, Github user name, and allowed users")
+	if *secret == "" || *token == "" || *username == "" {
+		fmt.Println("Must set Github webhook secret, Github access token, and Github user name")
 		os.Exit(1)
 	}
 

@@ -12,10 +12,12 @@ import (
 
 // The handler receives commands from the webhook
 type handler struct {
-	token    string
-	username string
-	allowed  []string
-	stop     chan struct{}
+	token       string
+	username    string
+	allowed     []string
+	teamAllowed []string
+	stop        chan struct{}
+	permissions
 }
 
 func newHandler(allowed []string, username, token string) *handler {
@@ -24,16 +26,13 @@ func newHandler(allowed []string, username, token string) *handler {
 		token:    token,
 		allowed:  allowed,
 		stop:     make(chan struct{}),
+		permissions: permissions{
+			username:      username,
+			token:         token,
+			alwaysAllowed: allowed,
+			teamMembers:   make(map[string][]string),
+		},
 	}
-}
-
-func (h *handler) isAllowed(user string) bool {
-	for _, allowed := range h.allowed {
-		if user == allowed {
-			return true
-		}
-	}
-	return false
 }
 
 func (h *handler) handlePullReq(p pr) {
@@ -64,7 +63,7 @@ func (h *handler) handlePullReq(p pr) {
 }
 
 func (h *handler) handleMerge(c comment) {
-	if !h.isAllowed(c.Sender.Login) {
+	if !h.isAllowed(c.Repository.FullName, c.Sender.Login) {
 		msg := fmt.Sprintf("I'm sorry, @%s. I'm afraid I can't do that.", c.Sender.Login)
 		c.post(msg, h.username, h.token)
 		log.Println("Rejecting request by unknown user", c.Sender.Login)
