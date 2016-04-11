@@ -70,8 +70,7 @@ func (h *handler) handlePullReq(p pr) {
 
 func (h *handler) handleMerge(c comment) {
 	if !h.isAllowed(c.Repository.FullName, c.Sender.Login) {
-		msg := fmt.Sprintf("I'm sorry, @%s. I'm afraid I can't do that.", c.Sender.Login)
-		c.post(msg, h.username, h.token)
+		c.post(noAccessResponse(c), h.username, h.token)
 		log.Println("Rejecting request by unknown user", c.Sender.Login)
 		return
 	}
@@ -88,13 +87,11 @@ func (h *handler) handleMerge(c comment) {
 		h.performMerge(c, pr)
 
 	case statePending:
-		body := fmt.Sprintf(":clock1: Build status is `%s`. I'll wait to see if this becomes successful and then merge!", status)
-		c.post(body, h.username, h.token)
+		c.post(waitingResponse(c), h.username, h.token)
 		go h.delayedMerge(c, pr)
 
 	default:
-		body := fmt.Sprintf(":no_good: Build status is `%s` -- refusing to merge.", status)
-		c.post(body, h.username, h.token)
+		c.post(badBuildResponse(c, status), h.username, h.token)
 	}
 }
 
@@ -110,8 +107,7 @@ func (h *handler) delayedMerge(c comment, pr pr) {
 			h.performMerge(c, pr)
 			return
 		case stateError, stateFailure:
-			body := fmt.Sprintf(":no_good: Build status is `%s` -- refusing to merge.", status)
-			c.post(body, h.username, h.token)
+			c.post(badBuildResponse(c, status), h.username, h.token)
 			return
 		}
 
@@ -121,8 +117,7 @@ func (h *handler) delayedMerge(c comment, pr pr) {
 		}
 	}
 
-	body := fmt.Sprintf(":watch: Timed out waiting for the build status to turn green (exceeded %s). Let me know when things look good.", maxWaitTime)
-	c.post(body, h.username, h.token)
+	c.post(timeoutResponse(c, maxWaitTime), h.username, h.token)
 }
 
 func (h *handler) performMerge(c comment, pr pr) {
@@ -149,7 +144,7 @@ func (h *handler) performMerge(c comment, pr pr) {
 
 	user, err := c.user(h.username, h.token)
 	if err != nil || user.Email == "" {
-		c.post(":no_entry_sign: Merge failed; could net retrieve user information for @"+c.Sender.Login, h.username, h.token)
+		c.post(noUserResponse(c), h.username, h.token)
 		log.Printf("Failed merge of PR %d on %s for %s: no user info (%v)", c.Issue.Number, c.Repository.FullName, c.Sender.Login, err)
 		return
 	}
@@ -161,15 +156,14 @@ func (h *handler) performMerge(c comment, pr pr) {
 	os.Chdir(cur)
 
 	if err != nil {
-		c.post(":no_entry_sign: "+err.Error(), h.username, h.token)
+		c.post(err.Error(), h.username, h.token)
 		log.Printf("Failed merge of PR %d on %s for %s:\n%s", c.Issue.Number, c.Repository.FullName, c.Sender.Login, err.Error())
 		pr.setStatus(stateFailure, "st-review", "Merge failed.", h.username, h.token)
 
 		return
 	}
 
-	resMd := fmt.Sprintf(":ok_hand: OK, merged as %s. Thanks, @%s!", sha1, c.Issue.User.Login)
-	c.post(resMd, h.username, h.token)
+	c.post(thanksResponse(c, sha1), h.username, h.token)
 	pr.setStatus(stateSuccess, "st-review", "Merged.", h.username, h.token)
 	c.close(h.username, h.token)
 	log.Printf("Completed merge of PR %d on %s for %s", c.Issue.Number, c.Repository.FullName, c.Sender.Login)
@@ -221,7 +215,7 @@ func squash(pr pr, user user, msg string) (string, error) {
 
 	if s.Error() != nil {
 		// Overwrite the error with whatever actual output we had, as a markdown verbatim.
-		return "", fmt.Errorf("Merge failed:\n\n```\n%s\n```\n", s.output.String())
+		return "", errorResponse(s.output.String())
 	}
 	return sha1, nil
 }
