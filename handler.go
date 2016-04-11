@@ -53,7 +53,7 @@ func (h *handler) handlePullReq(p pr) {
 	switch p.Action {
 	case "synchronize", "opened", "reopened":
 		updatePR(p.Number)
-		p.setStatus(statePending, "st-review", "Merge using st-review only, please.", h.username, h.token)
+		p.setStatus(stateSuccess, "st-review", "At your service.", h.username, h.token)
 	case "closed":
 		closePR(p.Number)
 		p.setStatus(stateSuccess, "st-review", "Closed.", h.username, h.token)
