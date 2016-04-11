@@ -117,7 +117,6 @@ func (p *pr) getStatuses(username, token string) []status {
 }
 
 func overallStatus(ss []status) prState {
-	log.Println("Status list:", ss)
 	total := stateSuccess
 	for _, s := range ss {
 		switch s.State {
