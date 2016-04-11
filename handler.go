@@ -107,7 +107,7 @@ func (h *handler) handleMerge(c comment) {
 	pr.setStatus(stateSuccess, "st-review", "Merging...", h.username, h.token)
 
 	os.Chdir(c.Repository.FullName)
-	sha1, err := squash(c.Issue.Number, user, overrideDescr)
+	sha1, err := squash(pr, user, overrideDescr)
 	os.Chdir(cur)
 
 	if err != nil {
@@ -127,10 +127,10 @@ func (h *handler) handleMerge(c comment) {
 
 var allowedCommitSubjectRe = regexp.MustCompile(`^[a-zA-Z0-9_./-]+:\s`)
 
-func squash(pr int, user user, msg string) (string, error) {
-	sourceBranch := fmt.Sprintf("pr-%d", pr)
+func squash(pr pr, user user, msg string) (string, error) {
+	sourceBranch := fmt.Sprintf("pr-%d", pr.Number)
 	s := newScript()
-	s.run("git", "fetch", "-f", "origin", fmt.Sprintf("refs/pull/%d/head:pr-%d", pr, pr))
+	s.run("git", "fetch", "-f", "origin", fmt.Sprintf("refs/pull/%d/head:pr-%d", pr.Number, pr.Number))
 	s.run("git", "fetch", "-f", "origin", "master:orig/master")
 
 	s.run("git", "reset", "--hard")
@@ -161,6 +161,8 @@ func squash(pr int, user user, msg string) (string, error) {
 		// Commit message from first commit
 		body = t.run("git", "log", "-n1", "--pretty=format:%B", firstCommit)
 	}
+
+	body = fmt.Sprintf("%s\n\nGitHub-Pull-Request: %s\n", strings.TrimSpace(body), pr.HTMLURL)
 
 	s.run("git", "merge", "--squash", "--no-commit", sourceBranch)
 	s.runPipe(bytes.NewBufferString(body), "git", "commit", "-F", "-")
