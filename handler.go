@@ -8,6 +8,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
+)
+
+const (
+	maxWaitTime = 30 * time.Minute
+	maxPollTime = 64 * time.Second
 )
 
 // The handler receives commands from the webhook
@@ -70,6 +76,56 @@ func (h *handler) handleMerge(c comment) {
 		return
 	}
 
+	pr, err := c.getPR()
+	if err != nil {
+		log.Println("No pull request:", err)
+		return
+	}
+
+	status := overallStatus(pr.getStatuses(h.username, h.token))
+	switch status {
+	case stateSuccess:
+		h.performMerge(c, pr)
+
+	case statePending:
+		body := fmt.Sprintf("Build status is `%s`. I'll wait to see if this becomes successful and then merge!", status)
+		c.post(body, h.username, h.token)
+		go h.delayedMerge(c, pr)
+
+	default:
+		body := fmt.Sprintf("Build status is `%s` -- cowardly refusing to merge.", status)
+		c.post(body, h.username, h.token)
+	}
+}
+
+func (h *handler) delayedMerge(c comment, pr pr) {
+	t0 := time.Now()
+	wait := time.Second
+
+	for time.Since(t0) < maxWaitTime {
+		status := overallStatus(pr.getStatuses(h.username, h.token))
+
+		switch status {
+		case stateSuccess:
+			h.performMerge(c, pr)
+			return
+		case stateError, stateFailure:
+			body := fmt.Sprintf("Build status is `%s` -- cowardly refusing to merge.", status)
+			c.post(body, h.username, h.token)
+			return
+		}
+
+		time.Sleep(wait)
+		if wait < maxPollTime {
+			wait *= 2
+		}
+	}
+
+	body := fmt.Sprintf("Timed out waiting for build state to become successfull (exceeded %s).", maxWaitTime)
+	c.post(body, h.username, h.token)
+}
+
+func (h *handler) performMerge(c comment, pr pr) {
 	log.Printf("Attemping merge of PR %d on %s for %s", c.Issue.Number, c.Repository.FullName, c.Sender.Login)
 
 	info, err := os.Stat(filepath.Join(c.Repository.FullName, ".git"))
@@ -95,12 +151,6 @@ func (h *handler) handleMerge(c comment) {
 	if err != nil || user.Email == "" {
 		c.post("Merge failed; could net retrieve user information for @"+c.Sender.Login, h.username, h.token)
 		log.Printf("Failed merge of PR %d on %s for %s: no user info (%v)", c.Issue.Number, c.Repository.FullName, c.Sender.Login, err)
-		return
-	}
-
-	pr, err := c.getPR()
-	if err != nil {
-		log.Println("No pull request:", err)
 		return
 	}
 
