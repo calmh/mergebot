@@ -68,6 +68,23 @@ func (h *handler) handlePullReq(p pr) {
 	os.Chdir(cur)
 }
 
+func (h *handler) handleStop(c comment) {
+	if !h.isAllowed(c.Repository.FullName, c.Sender.Login) {
+		c.post(noAccessResponse(c), h.username, h.token)
+		log.Println("Rejecting request by unknown user", c.Sender.Login)
+		return
+	}
+
+	pr, err := c.getPR()
+	if err != nil {
+		log.Println("No pull request:", err)
+		return
+	}
+
+	pr.setStatus(stateFailure, "st-review", "Not to be merged as is.", h.username, h.token)
+	c.post(notMergingResponse(c), h.username, h.token)
+}
+
 func (h *handler) handleMerge(c comment) {
 	if !h.isAllowed(c.Repository.FullName, c.Sender.Login) {
 		c.post(noAccessResponse(c), h.username, h.token)
@@ -149,8 +166,6 @@ func (h *handler) performMerge(c comment, pr pr) {
 		return
 	}
 
-	pr.setStatus(stateSuccess, "st-review", "Merging...", h.username, h.token)
-
 	os.Chdir(c.Repository.FullName)
 	sha1, err := squash(pr, user, overrideDescr)
 	os.Chdir(cur)
@@ -158,13 +173,11 @@ func (h *handler) performMerge(c comment, pr pr) {
 	if err != nil {
 		c.post(err.Error(), h.username, h.token)
 		log.Printf("Failed merge of PR %d on %s for %s:\n%s", c.Issue.Number, c.Repository.FullName, c.Sender.Login, err.Error())
-		pr.setStatus(stateFailure, "st-review", "Merge failed.", h.username, h.token)
 
 		return
 	}
 
 	c.post(thanksResponse(c, sha1), h.username, h.token)
-	pr.setStatus(stateSuccess, "st-review", "Merged.", h.username, h.token)
 	c.close(h.username, h.token)
 	log.Printf("Completed merge of PR %d on %s for %s", c.Issue.Number, c.Repository.FullName, c.Sender.Login)
 }

@@ -32,3 +32,7 @@ func noAccessResponse(c comment) string {
 func errorResponse(output string) error {
 	return fmt.Errorf(":no_entry: Merge failed:\n\n```\n%s\n```\n", output)
 }
+
+func notMergingResponse(c comment) string {
+	return ":no_entry: Preventing merge for the time being. Push a new revision to reset!"
+}

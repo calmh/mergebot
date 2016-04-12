@@ -28,6 +28,9 @@ func main() {
 	h := newWebhook(*listenAddr, *secret, *username, *token)
 	h.handleComment("merge", s.handleMerge)
 	h.handleComment("squash", s.handleMerge)
+	h.handleComment("stop", s.handleStop)
+	h.handleComment("don't", s.handleStop)
+	h.handleComment("prevent", s.handleStop)
 	h.handlePR(s.handlePullReq)
 
 	main := suture.NewSimple("main")
