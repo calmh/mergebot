@@ -29,8 +29,12 @@ func noAccessResponse(c comment) string {
 	return fmt.Sprintf(":hand: I'm sorry, @%s. I'm afraid I can't do that.", c.Sender.Login)
 }
 
-func errorResponse(output string) error {
-	return fmt.Errorf(":no_entry: Merge failed:\n\n```\n%s\n```\n", output)
+func errorResponse(output string) string {
+	return fmt.Sprintf(":no_entry: Merge failed:\n\n```\n%s\n```\n", output)
+}
+
+func cloneFailedResponse(output string) string {
+	return fmt.Sprintf(":no_entry: Clone failed:\n\n```\n%s\n```\n", output)
 }
 
 func notMergingResponse(c comment) string {

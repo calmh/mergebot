@@ -42,10 +42,11 @@ func newHandler(allowed []string, username, token string) *handler {
 }
 
 func (h *handler) handlePullReq(p pr) {
-	info, err := os.Stat(filepath.Join(p.Repository.FullName, ".git"))
-	if err != nil || !info.IsDir() {
-		log.Println("No repo for", p.Repository.FullName)
-		return
+	if _, err := os.Stat(filepath.Join(p.Repository.FullName, ".git")); err != nil {
+		if err := clone(p.Repository.FullName); err != nil {
+			log.Println(err)
+			return
+		}
 	}
 
 	cur, err := os.Getwd()
@@ -140,10 +141,12 @@ func (h *handler) delayedMerge(c comment, pr pr) {
 func (h *handler) performMerge(c comment, pr pr) {
 	log.Printf("Attemping merge of PR %d on %s for %s", c.Issue.Number, c.Repository.FullName, c.Sender.Login)
 
-	info, err := os.Stat(filepath.Join(c.Repository.FullName, ".git"))
-	if err != nil || !info.IsDir() {
-		log.Println("No repo for", c.Repository.FullName)
-		return
+	if _, err := os.Stat(filepath.Join(c.Repository.FullName, ".git")); err != nil {
+		if err := clone(c.Repository.FullName); err != nil {
+			log.Println(err)
+			c.post(cloneFailedResponse(err.Error()), h.username, h.token)
+			return
+		}
 	}
 
 	cur, err := os.Getwd()
@@ -171,7 +174,7 @@ func (h *handler) performMerge(c comment, pr pr) {
 	os.Chdir(cur)
 
 	if err != nil {
-		c.post(err.Error(), h.username, h.token)
+		c.post(errorResponse(err.Error()), h.username, h.token)
 		log.Printf("Failed merge of PR %d on %s for %s:\n%s", c.Issue.Number, c.Repository.FullName, c.Sender.Login, err.Error())
 
 		return
@@ -228,7 +231,7 @@ func squash(pr pr, user user, msg string) (string, error) {
 
 	if s.Error() != nil {
 		// Overwrite the error with whatever actual output we had, as a markdown verbatim.
-		return "", errorResponse(s.output.String())
+		return "", fmt.Errorf("%s", s.output.String())
 	}
 	return sha1, nil
 }
@@ -242,4 +245,13 @@ func updatePR(pr int) {
 func closePR(pr int) {
 	s := newScript()
 	s.run("git", "push", "origin", fmt.Sprintf(":pr-%d", pr))
+}
+
+func clone(repo string) error {
+	s := newScript()
+	s.run("git", "clone", fmt.Sprintf("git@github.com:%s.git", repo), repo)
+	if s.Error() != nil {
+		return fmt.Errorf("%s", s.output.String())
+	}
+	return nil
 }
