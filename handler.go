@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,8 @@ type handler struct {
 	allowed     []string
 	teamAllowed []string
 	stop        chan struct{}
+	pending     map[int]struct{}
+	mut         sync.Mutex
 	permissions
 }
 
@@ -32,6 +35,7 @@ func newHandler(allowed []string, username, token string) *handler {
 		token:    token,
 		allowed:  allowed,
 		stop:     make(chan struct{}),
+		pending:  make(map[int]struct{}),
 		permissions: permissions{
 			username:      username,
 			token:         token,
@@ -42,6 +46,9 @@ func newHandler(allowed []string, username, token string) *handler {
 }
 
 func (h *handler) handlePullReq(p pr) {
+	h.mut.Lock()
+	defer h.mut.Unlock()
+
 	if _, err := os.Stat(filepath.Join(p.Repository.FullName, ".git")); err != nil {
 		if err := clone(p.Repository.FullName); err != nil {
 			log.Println(err)
@@ -70,6 +77,9 @@ func (h *handler) handlePullReq(p pr) {
 }
 
 func (h *handler) handleStop(c comment) {
+	h.mut.Lock()
+	defer h.mut.Unlock()
+
 	if !h.isAllowed(c.Repository.FullName, c.Sender.Login) {
 		c.post(noAccessResponse(c), h.username, h.token)
 		log.Println("Rejecting request by unknown user", c.Sender.Login)
@@ -87,9 +97,18 @@ func (h *handler) handleStop(c comment) {
 }
 
 func (h *handler) handleMerge(c comment) {
+	h.mut.Lock()
+	defer h.mut.Unlock()
+
 	if !h.isAllowed(c.Repository.FullName, c.Sender.Login) {
 		c.post(noAccessResponse(c), h.username, h.token)
 		log.Println("Rejecting request by unknown user", c.Sender.Login)
+		return
+	}
+
+	if _, ok := h.pending[c.Issue.Number]; ok {
+		c.post(alreadyPendingResponse(c), h.username, h.token)
+		log.Println("Rejecting request for already pending PR")
 		return
 	}
 
@@ -106,6 +125,7 @@ func (h *handler) handleMerge(c comment) {
 
 	case statePending:
 		c.post(waitingResponse(c), h.username, h.token)
+		h.pending[c.Issue.Number] = struct{}{}
 		go h.delayedMerge(c, pr)
 
 	default:
@@ -114,6 +134,12 @@ func (h *handler) handleMerge(c comment) {
 }
 
 func (h *handler) delayedMerge(c comment, pr pr) {
+	defer func() {
+		h.mut.Lock()
+		delete(h.pending, c.Issue.Number)
+		h.mut.Unlock()
+	}()
+
 	t0 := time.Now()
 	wait := time.Second
 
@@ -144,7 +170,7 @@ func (h *handler) performMerge(c comment, pr pr) {
 	if _, err := os.Stat(filepath.Join(c.Repository.FullName, ".git")); err != nil {
 		if err := clone(c.Repository.FullName); err != nil {
 			log.Println(err)
-			c.post(cloneFailedResponse(err.Error()), h.username, h.token)
+			c.post(cloneFailedResponse(c, err.Error()), h.username, h.token)
 			return
 		}
 	}
@@ -174,7 +200,7 @@ func (h *handler) performMerge(c comment, pr pr) {
 	os.Chdir(cur)
 
 	if err != nil {
-		c.post(errorResponse(err.Error()), h.username, h.token)
+		c.post(errorResponse(c, err.Error()), h.username, h.token)
 		log.Printf("Failed merge of PR %d on %s for %s:\n%s", c.Issue.Number, c.Repository.FullName, c.Sender.Login, err.Error())
 
 		return
