@@ -116,9 +116,16 @@ func (p *pr) getStatuses(username, token string) []status {
 	return res
 }
 
-func overallStatus(ss []status) prState {
+func overallStatus(ss []status, skip []string) prState {
 	total := stateSuccess
+	skipContext := make(map[string]bool)
+	for _, s := range skip {
+		skipContext[s] = true
+	}
 	for _, s := range ss {
+		if skipContext[s.Context] {
+			continue
+		}
 		switch s.State {
 		case stateError, stateFailure:
 			return s.State

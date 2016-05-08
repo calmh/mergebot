@@ -118,7 +118,9 @@ func (h *handler) handleMerge(c comment) {
 		return
 	}
 
-	status := overallStatus(pr.getStatuses(h.username, h.token))
+	skip := fieldValues(c.Comment.Body, "Skip-Check")
+	status := overallStatus(pr.getStatuses(h.username, h.token), skip)
+
 	switch status {
 	case stateSuccess:
 		h.performMerge(c, pr)
@@ -143,8 +145,10 @@ func (h *handler) delayedMerge(c comment, pr pr) {
 	t0 := time.Now()
 	wait := time.Second
 
+	skip := fieldValues(c.Comment.Body, "Skip-Check")
+
 	for time.Since(t0) < maxWaitTime {
-		status := overallStatus(pr.getStatuses(h.username, h.token))
+		status := overallStatus(pr.getStatuses(h.username, h.token), skip)
 
 		switch status {
 		case stateSuccess:
@@ -280,4 +284,19 @@ func clone(repo string) error {
 		return fmt.Errorf("%s", s.output.String())
 	}
 	return nil
+}
+
+func fieldValues(message, field string) []string {
+	var res []string
+	field = strings.ToLower(field)
+	for _, line := range strings.Split(message, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		if strings.ToLower(fields[0]) == field+":" {
+			res = append(res, fields[1:]...)
+		}
+	}
+	return res
 }

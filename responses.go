@@ -14,7 +14,7 @@ func thanksResponse(c comment, sha1 string) string {
 }
 
 func waitingResponse(c comment) string {
-	return fmt.Sprintf("@%s: Build status is `pending`. I'll wait until it goes green and then merge!")
+	return fmt.Sprintf("@%s: Build status is `pending`. I'll wait until it goes green and then merge!", c.Sender.Login)
 }
 
 func badBuildResponse(c comment, status prState) string {
