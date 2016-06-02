@@ -25,6 +25,7 @@ type handler struct {
 	teamAllowed []string
 	stop        chan struct{}
 	pending     map[int]struct{}
+	lgtm        map[int]stringset
 	mut         sync.Mutex
 	permissions
 }
@@ -36,6 +37,7 @@ func newHandler(allowed []string, username, token string) *handler {
 		allowed:  allowed,
 		stop:     make(chan struct{}),
 		pending:  make(map[int]struct{}),
+		lgtm:     make(map[int]stringset),
 		permissions: permissions{
 			username:      username,
 			token:         token,
@@ -135,6 +137,46 @@ func (h *handler) handleMerge(c comment) {
 	}
 }
 
+func (h *handler) handleLGTM(c comment) {
+	h.mut.Lock()
+	defer h.mut.Unlock()
+
+	if !h.isAllowed(c.Repository.FullName, c.Sender.Login) {
+		c.post(noAccessResponse(c), h.username, h.token)
+		log.Println("Rejecting request by unknown user", c.Sender.Login)
+		return
+	}
+
+	h.lgtm[c.Issue.Number] = h.lgtm[c.Issue.Number].add(c.Sender.Login)
+	if len(h.lgtm[c.Issue.Number]) >= 2 {
+		defer func() { delete(h.lgtm, c.Issue.Number) }()
+
+		pr, err := c.getPR()
+		if err != nil {
+			log.Println("No pull request:", err)
+			return
+		}
+
+		skip := fieldValues(c.Comment.Body, "Skip-Check")
+		status := overallStatus(pr.getStatuses(h.username, h.token), skip)
+
+		switch status {
+		case stateSuccess:
+			h.performMerge(c, pr)
+
+		case statePending:
+			c.post(waitingResponse(c), h.username, h.token)
+			h.pending[c.Issue.Number] = struct{}{}
+			go h.delayedMerge(c, pr)
+
+		default:
+			c.post(badBuildResponse(c, status), h.username, h.token)
+		}
+	} else {
+		c.post(lgtmResponse(c), h.username, h.token)
+	}
+}
+
 func (h *handler) delayedMerge(c comment, pr pr) {
 	defer func() {
 		h.mut.Lock()
@@ -200,7 +242,7 @@ func (h *handler) performMerge(c comment, pr pr) {
 	}
 
 	os.Chdir(c.Repository.FullName)
-	sha1, err := squash(pr, user, overrideDescr)
+	sha1, err := squash(pr, user, overrideDescr, h.lgtm[c.Issue.Number])
 	os.Chdir(cur)
 
 	if err != nil {
@@ -217,7 +259,7 @@ func (h *handler) performMerge(c comment, pr pr) {
 
 var allowedCommitSubjectRe = regexp.MustCompile(`^[a-zA-Z0-9_./-]+:\s`)
 
-func squash(pr pr, user user, msg string) (string, error) {
+func squash(pr pr, user user, msg string, lgtm []string) (string, error) {
 	sourceBranch := fmt.Sprintf("pr-%d", pr.Number)
 	s := newScript()
 	s.run("git", "fetch", "-f", "origin", fmt.Sprintf("refs/pull/%d/head:pr-%d", pr.Number, pr.Number))
@@ -253,6 +295,9 @@ func squash(pr pr, user user, msg string) (string, error) {
 	}
 
 	body = fmt.Sprintf("%s\n\nGitHub-Pull-Request: %s\n", strings.TrimSpace(body), pr.HTMLURL)
+	if len(lgtm) > 0 {
+		body = fmt.Sprintf("%sLGTM: %s\n", body, strings.Join(lgtm, ", "))
+	}
 
 	s.run("git", "merge", "--squash", "--no-commit", sourceBranch)
 	s.runPipe(bytes.NewBufferString(body), "git", "commit", "-F", "-")
@@ -299,4 +344,15 @@ func fieldValues(message, field string) []string {
 		}
 	}
 	return res
+}
+
+type stringset []string
+
+func (s stringset) add(item string) stringset {
+	for _, v := range s {
+		if item == v {
+			return s
+		}
+	}
+	return stringset(append(s, item))
 }

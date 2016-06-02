@@ -44,3 +44,7 @@ func notMergingResponse(c comment) string {
 func alreadyPendingResponse(c comment) string {
 	return fmt.Sprintf("@%s: There's already a merge pending for this PR.", c.Sender.Login)
 }
+
+func lgtmResponse(c comment) string {
+	return fmt.Sprintf("@%s: Noted! Need another LGTM or explicit merge command.", c.Sender.Login)
+}
