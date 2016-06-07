@@ -20,8 +20,11 @@ type pr struct {
 		FullName    string `json:"full_name"`
 		StatusesURL string `json:"statuses_url"` // set in events, contains {sha} placeholder
 	}
-	StatusesURL string `json:"statuses_url"` // set when getting manually
-	HTMLURL     string `json:"html_url"`     // set when getting manually
+	StatusesURL string   `json:"statuses_url"` // set when getting manually
+	HTMLURL     string   `json:"html_url"`     // set when getting manually
+	Base        struct { // set when getting manually
+		Ref string
+	}
 }
 
 type prState string

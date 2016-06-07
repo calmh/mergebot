@@ -261,18 +261,20 @@ var allowedCommitSubjectRe = regexp.MustCompile(`^[a-zA-Z0-9_./-]+:\s`)
 
 func squash(pr pr, user user, msg string, lgtm []string) (string, error) {
 	sourceBranch := fmt.Sprintf("pr-%d", pr.Number)
+	dstBranch := pr.Base.Ref
+
 	s := newScript()
 	s.run("git", "fetch", "-f", "origin", fmt.Sprintf("refs/pull/%d/head:pr-%d", pr.Number, pr.Number))
-	s.run("git", "fetch", "-f", "origin", "master:orig/master")
+	s.run("git", "fetch", "-f", "origin", fmt.Sprintf("%s:orig/%s", dstBranch, dstBranch))
 
 	s.run("git", "reset", "--hard")
-	s.run("git", "checkout", "master")
-	s.run("git", "reset", "--hard", "orig/master")
+	s.run("git", "checkout", dstBranch)
+	s.run("git", "reset", "--hard", "orig/"+dstBranch)
 	s.run("git", "clean", "-fxd")
 
 	// Find first commit and extract info from it
 	t := newScript()
-	mergeBase := t.run("git", "merge-base", sourceBranch, "master")
+	mergeBase := t.run("git", "merge-base", sourceBranch, dstBranch)
 	revs := strings.Fields(t.run("git", "rev-list", mergeBase+".."+sourceBranch))
 	if len(revs) == 0 {
 		return "", fmt.Errorf("Nothing to merge, as far as I can tell.")
@@ -302,7 +304,7 @@ func squash(pr pr, user user, msg string, lgtm []string) (string, error) {
 	s.run("git", "merge", "--squash", "--no-commit", sourceBranch)
 	s.runPipe(bytes.NewBufferString(body), "git", "commit", "-F", "-")
 	sha1 := s.run("git", "rev-parse", "HEAD")
-	s.run("git", "push", "origin", "master")
+	s.run("git", "push", "origin", dstBranch)
 
 	if s.Error() != nil {
 		// Overwrite the error with whatever actual output we had, as a markdown verbatim.
