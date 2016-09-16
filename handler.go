@@ -27,10 +27,11 @@ type handler struct {
 	pending     map[int]struct{}
 	lgtm        map[int]stringset
 	mut         sync.Mutex
+	branches    bool
 	permissions
 }
 
-func newHandler(allowed []string, username, token string) *handler {
+func newHandler(allowed []string, username, token string, branches bool) *handler {
 	return &handler{
 		username: username,
 		token:    token,
@@ -38,6 +39,7 @@ func newHandler(allowed []string, username, token string) *handler {
 		stop:     make(chan struct{}),
 		pending:  make(map[int]struct{}),
 		lgtm:     make(map[int]stringset),
+		branches: branches,
 		permissions: permissions{
 			username:      username,
 			token:         token,
@@ -68,10 +70,14 @@ func (h *handler) handlePullReq(p pr) {
 
 	switch p.Action {
 	case "synchronize", "opened", "reopened":
-		updatePR(p.Number)
+		if h.branches {
+			updatePRBranch(p.Number)
+		}
 		p.setStatus(stateSuccess, "st-review", "At your service.", h.username, h.token)
 	case "closed":
-		closePR(p.Number)
+		if h.branches {
+			deletePRBranch(p.Number)
+		}
 		p.setStatus(stateSuccess, "st-review", "Closed.", h.username, h.token)
 	}
 
@@ -313,13 +319,13 @@ func squash(pr pr, user user, msg string, lgtm []string) (string, error) {
 	return sha1, nil
 }
 
-func updatePR(pr int) {
+func updatePRBranch(pr int) {
 	s := newScript()
 	s.run("git", "fetch", "-f", "origin", fmt.Sprintf("refs/pull/%d/head:pr-%d", pr, pr))
 	s.run("git", "push", "-f", "origin", fmt.Sprintf("pr-%d", pr))
 }
 
-func closePR(pr int) {
+func deletePRBranch(pr int) {
 	s := newScript()
 	s.run("git", "push", "origin", fmt.Sprintf(":pr-%d", pr))
 }

@@ -15,6 +15,7 @@ func main() {
 	token := flag.String("token", "", "Github access token")
 	username := flag.String("username", "", "Github user name")
 	allow := flag.String("allow", "", "Comma separeted list of allowed maintainers")
+	branches := flag.Bool("branches", false, "Keep and update branches for PRs")
 	flag.Parse()
 
 	if *secret == "" || *token == "" || *username == "" {
@@ -24,7 +25,7 @@ func main() {
 
 	allowedUsers := strings.Split(*allow, ",")
 
-	s := newHandler(allowedUsers, *username, *token)
+	s := newHandler(allowedUsers, *username, *token, *branches)
 	h := newWebhook(*listenAddr, *secret, *username, *token)
 	h.handleComment("merge", s.handleMerge)
 	h.handleComment("squash", s.handleMerge)
