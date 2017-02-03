@@ -1,15 +1,15 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"log"
-	"net/http"
 	"sort"
+	"strings"
+
+	"github.com/google/go-github/github"
+	"golang.org/x/oauth2"
 )
 
 type permissions struct {
-	username      string
 	token         string
 	alwaysAllowed []string
 	teamMembers   map[string][]string // repo -> list of members
@@ -51,34 +51,32 @@ func (p *permissions) isAllowed(repo, login string) bool {
 }
 
 func (p *permissions) collaborators(repo string) ([]string, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://api.github.com/repos/%s/collaborators", repo), nil)
-	if err != nil {
-		log.Println("Request:", err)
-		return nil, err
-	}
-	req.SetBasicAuth(p.username, p.token)
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: p.token},
+	)
+	tc := oauth2.NewClient(oauth2.NoContext, ts)
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Println("Get:", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
+	client := github.NewClient(tc)
 
-	if resp.StatusCode > 299 {
-		log.Println("Get:", resp.Status)
-		return nil, err
-	}
-
-	var res []user
-	err = json.NewDecoder(resp.Body).Decode(&res)
-	if err != nil {
-		return nil, err
+	opt := &github.ListOptions{PerPage: 50}
+	var allCollabs []*github.User
+	ps := strings.Split(repo, "/")
+	owner, repo := ps[0], ps[1]
+	for {
+		users, resp, err := client.Repositories.ListCollaborators(owner, repo, opt)
+		if err != nil {
+			return nil, err
+		}
+		allCollabs = append(allCollabs, users...)
+		if resp.NextPage == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
 	}
 
 	userMap := make(map[string]bool)
-	for _, user := range res {
-		userMap[user.Login] = true
+	for _, user := range allCollabs {
+		userMap[*user.Login] = true
 	}
 
 	var users []string

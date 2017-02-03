@@ -41,7 +41,6 @@ func newHandler(allowed []string, username, token string, branches bool) *handle
 		lgtm:     make(map[int]stringset),
 		branches: branches,
 		permissions: permissions{
-			username:      username,
 			token:         token,
 			alwaysAllowed: allowed,
 			teamMembers:   make(map[string][]string),
