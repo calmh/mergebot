@@ -16,6 +16,7 @@ func main() {
 	username := flag.String("username", "", "Github user name")
 	allow := flag.String("allow", "", "Comma separeted list of allowed maintainers")
 	branches := flag.Bool("branches", false, "Keep and update branches for PRs")
+	dbfile := flag.String("dbfile", "mergebot.db", "Database file")
 	flag.Parse()
 
 	if *secret == "" || *token == "" || *username == "" {
@@ -25,7 +26,13 @@ func main() {
 
 	allowedUsers := strings.Split(*allow, ",")
 
-	s := newHandler(allowedUsers, *username, *token, *branches)
+	db, err := OpenDB(*dbfile)
+	if err != nil {
+		fmt.Println("Opening database:", err)
+		os.Exit(1)
+	}
+
+	s := newHandler(allowedUsers, *username, *token, *branches, db)
 	h := newWebhook(*listenAddr, *secret, *username, *token)
 	h.handleComment("merge", s.handleMerge)
 	h.handleComment("squash", s.handleMerge)

@@ -25,21 +25,21 @@ type handler struct {
 	teamAllowed []string
 	stop        chan struct{}
 	pending     map[int]struct{}
-	lgtm        map[int]stringset
 	mut         sync.Mutex
 	branches    bool
+	db          *db
 	permissions
 }
 
-func newHandler(allowed []string, username, token string, branches bool) *handler {
+func newHandler(allowed []string, username, token string, branches bool, db *db) *handler {
 	return &handler{
 		username: username,
 		token:    token,
 		allowed:  allowed,
 		stop:     make(chan struct{}),
 		pending:  make(map[int]struct{}),
-		lgtm:     make(map[int]stringset),
 		branches: branches,
+		db:       db,
 		permissions: permissions{
 			token:         token,
 			alwaysAllowed: allowed,
@@ -152,10 +152,10 @@ func (h *handler) handleLGTM(c comment) {
 		return
 	}
 
-	h.lgtm[c.Issue.Number] = h.lgtm[c.Issue.Number].add(c.Sender.Login)
-	if len(h.lgtm[c.Issue.Number]) >= 2 {
-		defer func() { delete(h.lgtm, c.Issue.Number) }()
+	h.db.LGTM(c.Issue.Number, c.Sender.Login)
+	lgtms := h.db.LGTMs(c.Issue.Number)
 
+	if len(lgtms) >= 2 {
 		pr, err := c.getPR()
 		if err != nil {
 			log.Println("No pull request:", err)
@@ -247,7 +247,7 @@ func (h *handler) performMerge(c comment, pr pr) {
 	}
 
 	os.Chdir(c.Repository.FullName)
-	sha1, err := squash(pr, user, overrideDescr, h.lgtm[c.Issue.Number])
+	sha1, err := squash(pr, user, overrideDescr, h.db.LGTMs(c.Issue.Number))
 	os.Chdir(cur)
 
 	if err != nil {
