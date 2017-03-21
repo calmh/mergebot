@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	maxWaitTime = 30 * time.Minute
-	maxPollTime = 64 * time.Second
+	maxWaitTime           = 30 * time.Minute
+	pollStepIncrease      = 5 * time.Second
+	lgtmsRequiredForMerge = 2
 )
 
 // The handler receives commands from the webhook
@@ -155,30 +156,31 @@ func (h *handler) handleLGTM(c comment) {
 	h.db.LGTM(c.Issue.Number, c.Sender.Login)
 	lgtms := h.db.LGTMs(c.Issue.Number)
 
-	if len(lgtms) >= 2 {
-		pr, err := c.getPR()
-		if err != nil {
-			log.Println("No pull request:", err)
-			return
-		}
-
-		skip := fieldValues(c.Comment.Body, "Skip-Check")
-		status := overallStatus(pr.getStatuses(h.username, h.token), skip)
-
-		switch status {
-		case stateSuccess:
-			h.performMerge(c, pr)
-
-		case statePending:
-			c.post(waitingResponse(c), h.username, h.token)
-			h.pending[c.Issue.Number] = struct{}{}
-			go h.delayedMerge(c, pr)
-
-		default:
-			c.post(badBuildResponse(c, status), h.username, h.token)
-		}
-	} else {
+	if len(lgtms) < lgtmsRequiredForMerge {
 		c.post(lgtmResponse(c), h.username, h.token)
+		return
+	}
+
+	pr, err := c.getPR()
+	if err != nil {
+		log.Println("No pull request:", err)
+		return
+	}
+
+	skip := fieldValues(c.Comment.Body, "Skip-Check")
+	status := overallStatus(pr.getStatuses(h.username, h.token), skip)
+
+	switch status {
+	case stateSuccess:
+		h.performMerge(c, pr)
+
+	case statePending:
+		c.post(waitingResponse(c), h.username, h.token)
+		h.pending[c.Issue.Number] = struct{}{}
+		go h.delayedMerge(c, pr)
+
+	default:
+		c.post(badBuildResponse(c, status), h.username, h.token)
 	}
 }
 
@@ -195,6 +197,8 @@ func (h *handler) delayedMerge(c comment, pr pr) {
 	skip := fieldValues(c.Comment.Body, "Skip-Check")
 
 	for time.Since(t0) < maxWaitTime {
+		time.Sleep(wait)
+
 		status := overallStatus(pr.getStatuses(h.username, h.token), skip)
 
 		switch status {
@@ -206,10 +210,7 @@ func (h *handler) delayedMerge(c comment, pr pr) {
 			return
 		}
 
-		time.Sleep(wait)
-		if wait < maxPollTime {
-			wait *= 2
-		}
+		wait += pollStepIncrease
 	}
 
 	c.post(timeoutResponse(c, maxWaitTime), h.username, h.token)
