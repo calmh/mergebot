@@ -17,6 +17,7 @@ func main() {
 	allow := flag.String("allow", "", "Comma separeted list of allowed maintainers")
 	branches := flag.Bool("branches", false, "Keep and update branches for PRs")
 	dbfile := flag.String("dbfile", "mergebot.db", "Database file")
+	authorsfile := flag.String("authorsfile", "", "AUTHORS file")
 	flag.Parse()
 
 	if *secret == "" || *token == "" || *username == "" {
@@ -32,7 +33,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	s := newHandler(allowedUsers, *username, *token, *branches, db)
+	s := newHandler(allowedUsers, *username, *token, *branches, db, *authorsfile)
 	h := newWebhook(*listenAddr, *secret, *username, *token)
 	h.handleComment("merge", s.handleMerge)
 	h.handleComment("squash", s.handleMerge)

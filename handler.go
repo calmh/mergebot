@@ -29,18 +29,20 @@ type handler struct {
 	mut         sync.Mutex
 	branches    bool
 	db          *db
+	authorsfile string
 	permissions
 }
 
-func newHandler(allowed []string, username, token string, branches bool, db *db) *handler {
+func newHandler(allowed []string, username, token string, branches bool, db *db, authorsfile string) *handler {
 	return &handler{
-		username: username,
-		token:    token,
-		allowed:  allowed,
-		stop:     make(chan struct{}),
-		pending:  make(map[int]struct{}),
-		branches: branches,
-		db:       db,
+		username:    username,
+		token:       token,
+		allowed:     allowed,
+		stop:        make(chan struct{}),
+		pending:     make(map[int]struct{}),
+		branches:    branches,
+		db:          db,
+		authorsfile: authorsfile,
 		permissions: permissions{
 			token:         token,
 			alwaysAllowed: allowed,
@@ -241,6 +243,10 @@ func (h *handler) performMerge(c comment, pr pr) {
 	}
 
 	user, err := c.user(h.username, h.token)
+	if err != nil || user.Email == "" {
+		user, err = getUserFromFile(h.username, h.authorsfile)
+		log.Printf("Looked up user info in file: %#v, %v", user, err)
+	}
 	if err != nil || user.Email == "" {
 		c.post(noUserResponse(c), h.username, h.token)
 		log.Printf("Failed merge of PR %d on %s for %s: no user info (%v)", c.Issue.Number, c.Repository.FullName, c.Sender.Login, err)
