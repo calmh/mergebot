@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"sort"
 	"strings"
@@ -63,7 +64,7 @@ func (p *permissions) collaborators(repo string) ([]string, error) {
 	ps := strings.Split(repo, "/")
 	owner, repo := ps[0], ps[1]
 	for {
-		users, resp, err := client.Repositories.ListCollaborators(owner, repo, opt)
+		users, resp, err := client.Repositories.ListCollaborators(context.TODO(), owner, repo, opt)
 		if err != nil {
 			return nil, err
 		}
