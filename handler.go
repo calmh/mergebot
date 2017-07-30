@@ -269,6 +269,18 @@ func (h *handler) performMerge(c comment, pr pr) {
 	log.Printf("Completed merge of PR %d on %s for %s", c.Issue.Number, c.Repository.FullName, c.Sender.Login)
 }
 
+func (h *handler) handleBuild(c comment) {
+	pr, err := c.getPR()
+	if err != nil {
+		log.Println("No pull request:", err)
+		return
+	}
+
+	if err := tcTriggerBuild(pr.Number); err != nil {
+		c.post(tcErrorResponse(c, err), h.username, h.token)
+	}
+}
+
 var allowedCommitSubjectRe = regexp.MustCompile(`^[a-zA-Z0-9_./-]+:\s`)
 
 func squash(pr pr, user user, msg string, lgtm []string) (string, error) {

@@ -41,6 +41,7 @@ func main() {
 	h.handleComment("don't", s.handleStop)
 	h.handleComment("prevent", s.handleStop)
 	h.handleComment("lgtm", s.handleLGTM)
+	h.handleComment("rebuild", s.handleBuild)
 	h.handlePR(s.handlePullReq)
 
 	main := suture.NewSimple("main")

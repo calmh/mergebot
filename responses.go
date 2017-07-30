@@ -48,3 +48,7 @@ func alreadyPendingResponse(c comment) string {
 func lgtmResponse(c comment) string {
 	return fmt.Sprintf("@%s: Noted! Need another LGTM or explicit merge command.", c.Sender.Login)
 }
+
+func tcErrorResponse(c comment, err error) string {
+	return fmt.Sprintf("@%s: Triggered the build, but TC said `%v`. Maybe it worked, maybe it didn't.", c.Sender.Login, err)
+}
