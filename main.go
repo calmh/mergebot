@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -32,6 +33,8 @@ func main() {
 		fmt.Println("Opening database:", err)
 		os.Exit(1)
 	}
+
+	log.SetFlags(log.Lshortfile)
 
 	s := newHandler(allowedUsers, *username, *token, *branches, db, *authorsfile)
 	h := newWebhook(*listenAddr, *secret, *username, *token)

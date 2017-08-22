@@ -67,12 +67,14 @@ func (h *webhook) Stop() {
 func (h *webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// We only expect POST requests here.
 	if r.Method != "POST" {
+		log.Println("Unexpected method", r.Method)
 		http.Error(w, "POST Expected", http.StatusMethodNotAllowed)
 		return
 	}
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
+		log.Println("Reading body:", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -94,6 +96,8 @@ func (h *webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "issue_comment":
 		var c comment
 		if err := json.Unmarshal(body, &c); err != nil {
+			log.Println("Unmarshal:", err)
+			log.Println(string(body))
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -127,6 +131,8 @@ func (h *webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "pull_request":
 		var p pr
 		if err := json.Unmarshal(body, &p); err != nil {
+			log.Println("Unmarshal:", err)
+			log.Println(string(body))
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

@@ -7,9 +7,9 @@ import (
 )
 
 func TestLGTMPersistence(t *testing.T) {
-	os.RemoveAll("testdata")
-	defer os.RemoveAll("testdata")
-	db, err := OpenDB("testdata")
+	os.RemoveAll("_db")
+	defer os.RemoveAll("_db")
+	db, err := OpenDB("_db")
 	if err != nil {
 		t.Fatal(err)
 	}

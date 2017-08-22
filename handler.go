@@ -129,7 +129,9 @@ func (h *handler) handleMerge(c comment) {
 	}
 
 	skip := fieldValues(c.Comment.Body, "Skip-Check")
-	status := overallStatus(pr.getStatuses(h.username, h.token), skip)
+	statuses := pr.getStatuses(h.username, h.token)
+	required := pr.getRequiredStatuses(h.username, h.token)
+	status := overallStatus(statuses, skip, required)
 
 	switch status {
 	case stateSuccess:
@@ -170,7 +172,9 @@ func (h *handler) handleLGTM(c comment) {
 	}
 
 	skip := fieldValues(c.Comment.Body, "Skip-Check")
-	status := overallStatus(pr.getStatuses(h.username, h.token), skip)
+	statuses := pr.getStatuses(h.username, h.token)
+	required := pr.getRequiredStatuses(h.username, h.token)
+	status := overallStatus(statuses, skip, required)
 
 	switch status {
 	case stateSuccess:
@@ -201,7 +205,9 @@ func (h *handler) delayedMerge(c comment, pr pr) {
 	for time.Since(t0) < maxWaitTime {
 		time.Sleep(wait)
 
-		status := overallStatus(pr.getStatuses(h.username, h.token), skip)
+		statuses := pr.getStatuses(h.username, h.token)
+		required := pr.getRequiredStatuses(h.username, h.token)
+		status := overallStatus(statuses, skip, required)
 
 		switch status {
 		case stateSuccess:
