@@ -356,7 +356,7 @@ func deletePRBranch(pr int) {
 
 func clone(repo string) error {
 	s := newScript()
-	s.run("git", "clone", fmt.Sprintf("git@github.com:%s.git", repo), repo)
+	s.run("git", "clone", fmt.Sprintf("https://github.com/%s.git", repo), repo)
 	if s.Error() != nil {
 		return fmt.Errorf("%s", s.output.String())
 	}
