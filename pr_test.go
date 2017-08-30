@@ -61,6 +61,12 @@ func TestOverallStatus(t *testing.T) {
 			req:      []string{"t1", "t2", "t3", "t4"},
 			overall:  statePending,
 		},
+		{
+			statuses: []status{{Context: "Check Authors (Syncthing)", State: stateError}, {Context: "t2", State: stateSuccess}, {Context: "t3", State: stateSuccess}},
+			skip:     []string{"authors"},
+			req:      []string{"Check Authors (Syncthing)", "t2", "t3"},
+			overall:  stateSuccess,
+		},
 	}
 
 	for i, tc := range cases {

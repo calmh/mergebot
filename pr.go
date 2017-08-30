@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 )
 
@@ -171,7 +172,11 @@ func overallStatus(ss []status, skip []string, req []string) prState {
 	total := stateSuccess
 
 	skipContext := make(map[string]bool)
+	var skipREs []*regexp.Regexp
 	for _, s := range skip {
+		if re, err := regexp.Compile(strings.ToLower(s)); err == nil {
+			skipREs = append(skipREs, re)
+		}
 		skipContext[s] = true
 	}
 
@@ -182,11 +187,17 @@ func overallStatus(ss []status, skip []string, req []string) prState {
 		reqPending[s] = struct{}{}
 	}
 
+outer:
 	for _, s := range ss {
 		delete(reqPending, s.Context)
 
 		if skipContext[s.Context] {
 			continue
+		}
+		for _, re := range skipREs {
+			if re.MatchString(strings.ToLower(s.Context)) {
+				continue outer
+			}
 		}
 
 		if len(req) > 0 && !reqContext[s.Context] {
