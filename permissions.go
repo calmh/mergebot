@@ -59,7 +59,8 @@ func (p *permissions) collaborators(repo string) ([]string, error) {
 
 	client := github.NewClient(tc)
 
-	opt := &github.ListOptions{PerPage: 50}
+	opt := new(github.ListCollaboratorsOptions)
+	opt.PerPage = 50
 	var allCollabs []*github.User
 	ps := strings.Split(repo, "/")
 	owner, repo := ps[0], ps[1]
