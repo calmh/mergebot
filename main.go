@@ -19,6 +19,7 @@ func main() {
 	branches := flag.Bool("branches", false, "Keep and update branches for PRs")
 	dbfile := flag.String("dbfile", "mergebot.db", "Database file")
 	authorsfile := flag.String("authorsfile", "", "AUTHORS file")
+	mergedLabel := flag.String("merged-label", "", "Label to add when merging")
 	flag.Parse()
 
 	if *secret == "" || *token == "" || *username == "" {
@@ -36,7 +37,7 @@ func main() {
 
 	log.SetFlags(log.Lshortfile)
 
-	s := newHandler(allowedUsers, *username, *token, *branches, db, *authorsfile)
+	s := newHandler(allowedUsers, *username, *token, *branches, db, *authorsfile, *mergedLabel)
 	h := newWebhook(*listenAddr, *secret, *username, *token)
 	h.handleComment("merge", s.handleMerge)
 	h.handleComment("squash", s.handleMerge)

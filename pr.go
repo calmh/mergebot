@@ -23,6 +23,7 @@ type pr struct {
 	}
 	StatusesURL string   `json:"statuses_url"` // set when getting manually
 	HTMLURL     string   `json:"html_url"`     // set when getting manually
+	IssueURL    string   `json:"issue_url"`    // set when getting manually
 	Base        struct { // set when getting manually
 		Ref  string
 		Repo struct {
@@ -63,6 +64,30 @@ func (p *pr) setStatus(state prState, context, description, username, token stri
 	url = strings.Replace(url, "{sha}", p.PullRequest.Head.SHA, 1)
 
 	req, err := http.NewRequest("POST", url, buf)
+	if err != nil {
+		log.Println("Request:", err)
+		return
+	}
+	req.SetBasicAuth(username, token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Println("Post:", err)
+		return
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode > 299 {
+		log.Println("Post:", resp.Status)
+		return
+	}
+}
+
+func (p *pr) setLabel(label, username, token string) {
+	buf := new(bytes.Buffer)
+	json.NewEncoder(buf).Encode([]string{label})
+
+	req, err := http.NewRequest("POST", p.IssueURL+"/labels", buf)
 	if err != nil {
 		log.Println("Request:", err)
 		return

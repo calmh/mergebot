@@ -30,10 +30,11 @@ type handler struct {
 	branches    bool
 	db          *db
 	authorsfile string
+	mergedLabel string
 	permissions
 }
 
-func newHandler(allowed []string, username, token string, branches bool, db *db, authorsfile string) *handler {
+func newHandler(allowed []string, username, token string, branches bool, db *db, authorsfile, mergedLabel string) *handler {
 	return &handler{
 		username:    username,
 		token:       token,
@@ -43,6 +44,7 @@ func newHandler(allowed []string, username, token string, branches bool, db *db,
 		branches:    branches,
 		db:          db,
 		authorsfile: authorsfile,
+		mergedLabel: mergedLabel,
 		permissions: permissions{
 			token:         token,
 			alwaysAllowed: allowed,
@@ -266,11 +268,13 @@ func (h *handler) performMerge(c comment, pr pr) {
 	if err != nil {
 		c.post(errorResponse(c, err.Error()), h.username, h.token)
 		log.Printf("Failed merge of PR %d on %s for %s:\n%s", c.Issue.Number, c.Repository.FullName, c.Sender.Login, err.Error())
-
 		return
 	}
 
 	c.post(thanksResponse(c, sha1), h.username, h.token)
+	if h.mergedLabel != "" {
+		pr.setLabel(h.mergedLabel, h.username, h.token)
+	}
 	c.close(h.username, h.token)
 	log.Printf("Completed merge of PR %d on %s for %s", c.Issue.Number, c.Repository.FullName, c.Sender.Login)
 }
